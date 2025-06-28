@@ -78,17 +78,17 @@ def run(
         widget.hide()
     widgets_hidden = True
 
-    # Set up etc...
+    # Set up eyesy (v3: renamed from etc)...
 
-    etc = eyesim.etc.System()
-    etc.mode_root = str(mode_folder.absolute())
-    etc.xres = width
-    etc.yres = height
+    eyesy = eyesim.etc.System()
+    eyesy.mode_root = str(mode_folder.absolute())
+    eyesy.xres = width
+    eyesy.yres = height
     for i in range(5):
-        setattr(etc, f"knob{i+1}", 0.5)
-    mode.setup(screen, etc)
+        setattr(eyesy, f"knob{i+1}", 0.5)
+    mode.setup(screen, eyesy)
     persist_button.onClick = lambda: setattr(
-        etc, 'auto_clear', not etc.auto_clear
+        eyesy, 'auto_clear', not eyesy.auto_clear
     )
 
     # Set up audio if applicable...
@@ -142,20 +142,23 @@ def run(
                     widgets_hidden = not widgets_hidden
 
             if has_audio:
-                etc.audio_in = get_audio_segment()
+                eyesy.audio_in = get_audio_segment()
 
             if not widgets_hidden:
                 for i, slider in enumerate(sliders, start=1):
                     value = slider.getValue() / 100.0
-                    setattr(etc, f"knob{i}", value)
+                    setattr(eyesy, f"knob{i}", value)
 
-            # Updates, draw, etc.
-            mode.draw(screen, etc)
+            # Updates, draw, eyesy (v3: renamed parameter)
+            mode.draw(screen, eyesy)
             pygame_widgets.update(events)
             pygame.display.update()
-            if etc.auto_clear:
-                screen.fill(etc.bg_color)
+            if eyesy.auto_clear:
+                screen.fill(eyesy.bg_color)
 
+            # Update frame count for v3 features like color_picker_lfo
+            eyesy.frame_count += 1
+            
             clock.tick(30)
     except KeyboardInterrupt:
         shutdown()

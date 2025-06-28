@@ -5,7 +5,7 @@ import random
 import math
 import pygame
 import traceback
-import imp
+import importlib.util
 import os
 import glob
 import sys
@@ -15,6 +15,7 @@ from eyesim import helpers
 
 
 class System:
+    """EYESY v3 compatible system class (replaces 'etc' with 'eyesy' naming)"""
 
     GRABS_PATH = "/sdcard/Grabs/"
     MODES_PATH = "/sdcard/Modes/Python/"
@@ -40,9 +41,7 @@ class System:
     BLUE = (0, 0, 255)
     OSDBG = (0,0,255)
 
-    # screen grabs
-    lastgrab = None
-    lastgrab_thumb = None
+    # screen grabs - v3: removed lastgrab and lastgrab_thumb
     tengrabs_thumbs = []
     grabcount = 0
     grabindex = 0
@@ -66,7 +65,7 @@ class System:
     # audio
     audio_in = [0] * 100
     audio_peak = 0
-    audio_trig = False
+    trig = False  # v3: renamed from audio_trig
     audio_scale = 1.0
     audio_trig_enable = True
    
@@ -112,7 +111,7 @@ class System:
 
     def update_trig_button(self, stat) :
         if (stat > 0 ):
-            self.audio_trig = True
+            self.trig = True  # v3: renamed from audio_trig
             self.trig_button = True
         else :
             self.trig_button = False
@@ -214,12 +213,10 @@ class System:
         pygame.image.save(self.screen,imagepath)
         # make sure it is saved as 'music' user, uid=gid=1000
         os.chown(imagepath, 1000, 1000)
-        # add to the grabs array
+        # add to the grabs array - v3: removed lastgrab references
         self.grabindex += 1
         self.grabindex %= 5
         pygame.transform.scale(self.screen, (128, 72), self.tengrabs_thumbs[self.grabindex] )
-        self.lastgrab = self.screen.copy()
-        self.lastgrab_thumb = self.tengrabs_thumbs[self.grabindex]
         print("grabbed " + imagepath)
 
     # load modes,  check if modes are found
@@ -233,7 +230,10 @@ class System:
             mode_path = self.MODES_PATH+mode_name+'/main.py'
             print(mode_path)
             try :
-                imp.load_source(mode_name, mode_path)
+                # v3: Replace deprecated imp.load_source with importlib
+                spec = importlib.util.spec_from_file_location(mode_name, mode_path)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
                 self.mode_names.append(mode_name)
                 got_a_mode = True
             except Exception as e:
@@ -245,7 +245,10 @@ class System:
         print("loadeing new mode "+new_mode+"...")
         mode_path = self.MODES_PATH+new_mode+'/main.py'
         try :
-            imp.load_source(new_mode, mode_path)
+            # v3: Replace deprecated imp.load_source with importlib
+            spec = importlib.util.spec_from_file_location(new_mode, mode_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
             self.mode_names.append(new_mode)
         except Exception as e:
             print(traceback.format_exc())
@@ -259,7 +262,11 @@ class System:
             del(sys.modules[self.mode]) 
         print("deleted module, reloading")
         try :
-            imp.load_source(self.mode, self.mode_root+'/main.py')
+            # v3: Replace deprecated imp.load_source with importlib
+            spec = importlib.util.spec_from_file_location(self.mode, self.mode_root+'/main.py')
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            sys.modules[self.mode] = module
             print("reloaded")
         except Exception as e:
             self.error = traceback.format_exc()
@@ -274,16 +281,12 @@ class System:
         # make sure it is saved as 'music' user, uid=gid=1000
         os.chown(self.GRABS_PATH, 1000, 1000)
         print('loading recent grabs...')
-        self.lastgrab = None
-        self.lastgrab_thumb = None
+        # v3: removed lastgrab and lastgrab_thumb initialization
         self.tengrabs_thumbs = []
         self.grabcount = 0
         self.grabindex = 0
         for i in range(0,11):
             self.tengrabs_thumbs.append(pygame.Surface((128, 72)))
-        
-        self.lastgrab = pygame.Surface(self.RES )
-        self.lastgrab_thumb = pygame.Surface((128,72) )
 
         for filepath in sorted(glob.glob(self.GRABS_PATH + '*.jpg')):
             try :
@@ -292,8 +295,7 @@ class System:
                 img = pygame.image.load(filepath)
                 img = img.convert()
                 thumb = pygame.transform.scale(img, (128, 72) )
-                self.lastgrab = img
-                self.lastgrab_thumb = thumb
+                # v3: removed lastgrab assignments
                 self.tengrabs_thumbs[self.grabcount] = thumb
                 self.grabcount += 1
             except Exception as e:
@@ -339,7 +341,7 @@ class System:
 
     def write_all_scenes(self):
 	    # write it
-        with open(self.SCENES_PATH, "wb") as f:
+        with open(self.SCENES_PATH, "w", newline='') as f:
     	    writer = csv.writer(f,quoting=csv.QUOTE_MINIMAL)
     	    writer.writerows(self.scenes) 
         #print("saved scenes: " + str(self.scenes))
@@ -349,12 +351,12 @@ class System:
     def load_scenes(self):
         # create scene file if doesn't exits
         if not os.path.exists(self.SCENES_PATH):
-            f = file(self.SCENES_PATH, "w")
-            f.close()
+            with open(self.SCENES_PATH, "w") as f:
+                pass
         # make sure it is saved as 'music' user, uid=gid=1000
         os.chown(self.SCENES_PATH, 1000, 1000)
         # open it
-        with open(self.SCENES_PATH, 'rb') as f:
+        with open(self.SCENES_PATH, 'r', newline='') as f:
             reader = csv.reader(f)
             csvin = list(reader)
         self.scenes = []
@@ -462,6 +464,18 @@ class System:
         
         color2 = (color[0], color[1], color[2])
         return color2
+
+    def color_picker_lfo(self, val, rate=1.0):
+        """v3: New color picker with LFO rate control"""
+        import time
+        # Use frame count or time for LFO
+        lfo_time = self.frame_count * rate * 0.01  # Adjust multiplier as needed
+        
+        # Modulate the input value with LFO
+        lfo_val = math.sin(lfo_time) * 0.1 + val
+        lfo_val = max(0.0, min(1.0, lfo_val))  # Clamp to 0-1
+        
+        return self.color_picker(lfo_val)
  
     def color_picker_bg( self, val):
         c = float(val)
@@ -476,7 +490,7 @@ class System:
 
     def clear_flags(self):
         self.new_midi = False
-        self.audio_trig = False
+        self.trig = False  # v3: renamed from audio_trig
         self.run_setup = False
         self.screengrab_flag = False
         self.midi_note_new = False
